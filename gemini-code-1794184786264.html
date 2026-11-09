@@ -1,0 +1,1514 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>판교 IT 활동 지원단 AI 도우미</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    html, body, #root {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #eaf4fd;
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    @keyframes livePulse {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.16); opacity: 1; }
+    }
+    @keyframes liveRipple {
+      0% { transform: scale(0.85); opacity: 0.75; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    .live-orb { animation: livePulse 2s infinite ease-in-out; }
+    .live-ring-1 { animation: liveRipple 2.2s infinite ease-out; }
+    .live-ring-2 { animation: liveRipple 2.2s infinite ease-out 0.7s; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- 원본 소스를 안전하게 보관하기 위한 id 부여 (코드 깨짐 원천 방지) -->
+  <script id="app-babel-source" type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const DEFAULT_MODELS = [
+      { id: "gemini-3-flash-preview", label: "Gemini 3.0 Flash (최신·빠름)" },
+      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (고성능·심층분석)" },
+      { id: "gemini-flash-latest", label: "Gemini Flash Latest (안정 버전)" },
+      { id: "gemini-pro-latest", label: "Gemini Pro Latest (안정 고성능)" }
+    ];
+
+    const GEMINI_VOICES = [
+      { id: "Aoede", label: "🎙️ 아오이데 (Aoede · 부드럽고 따뜻한 여성음)" },
+      { id: "Kore", label: "🎙️ 코레 (Kore · 차분하고 또렷한 여성음)" },
+      { id: "Leda", label: "🎙️ 레다 (Leda · 밝고 친근한 여성음)" },
+      { id: "Puck", label: "🎙️ 퍽 (Puck · 경쾌하고 활기찬 남성음)" },
+      { id: "Charon", label: "🎙️ 카론 (Charon · 중후하고 신뢰감 있는 남성음)" },
+      { id: "Fenrir", label: "🎙️ 펜리르 (Fenrir · 힘있고 명확한 남성음)" }
+    ];
+
+    // Raw PCM(24kHz, 16-bit, Mono) -> WAV Blob URL 변환
+    function pcmBase64ToWavUrl(base64Pcm, sampleRate = 24000) {
+      const binaryString = window.atob(base64Pcm);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+      const wavHeader = new ArrayBuffer(44);
+      const view = new DataView(wavHeader);
+      const writeString = (offset, str) => {
+        for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+      };
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + len, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeString(36, 'data');
+      view.setUint32(40, len, true);
+
+      const blob = new Blob([wavHeader, bytes], { type: 'audio/wav' });
+      return URL.createObjectURL(blob);
+    }
+
+    function FormattedMessage({ text }) {
+      const lines = (text || "").split('\n');
+      const renderBold = (str) => {
+        const parts = str.split(/(\*\*.*?\*\*)/g);
+        return parts.map((part, i) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={i} className="font-extrabold text-slate-900">{part.slice(2, -2)}</strong>;
+          }
+          return part;
+        });
+      };
+
+      return (
+        <div className="space-y-1.5">
+          {lines.map((rawLine, idx) => {
+            const line = rawLine.trim();
+            if (!line) return <div key={idx} className="h-1.5" />;
+            if (line.startsWith('### ')) {
+              return <h4 key={idx} className="font-extrabold text-base text-[#113264] pt-2">{renderBold(line.replace('### ', ''))}</h4>;
+            }
+            if (line.startsWith('## ')) {
+              return <h3 key={idx} className="font-extrabold text-lg text-[#113264] pt-2.5">{renderBold(line.replace('## ', ''))}</h3>;
+            }
+            if (line === '---') {
+              return <hr key={idx} className="my-2.5 border-slate-200" />;
+            }
+            if (line.startsWith('* ') || line.startsWith('- ')) {
+              return (
+                <div key={idx} className="flex items-start gap-2 pl-1 leading-relaxed">
+                  <span className="text-blue-600 font-black mt-0.5">•</span>
+                  <span className="flex-1">{renderBold(line.slice(2))}</span>
+                </div>
+              );
+            }
+            return <p key={idx} className="leading-relaxed">{renderBold(rawLine)}</p>;
+          })}
+        </div>
+      );
+    }
+
+    const Icon = ({ name, className = "w-5 h-5" }) => {
+      const icons = {
+        home: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
+        doc: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+        notice: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
+        history: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />,
+        settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />,
+        plus: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />,
+        clip: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />,
+        mic: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />,
+        wave: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M9 8v8m4-12v16m4-10v4m4-2h.01" />,
+        send: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
+        image: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />,
+        chart: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+        bulb: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />,
+        chevronRight: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />,
+        volume: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />,
+        stop: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />,
+        copy: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />,
+        x: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />,
+        refresh: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />,
+        external: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+      };
+      return (
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {icons[name] || icons.home}
+        </svg>
+      );
+    };
+
+    const PangyoLogo = ({ size = "large" }) => {
+      const dim = size === "large" ? "w-28 h-28" : "w-9 h-9";
+      return (
+        <svg className={dim} viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="56" y="10" width="6" height="6" rx="1" fill="#0284c7" />
+          <rect x="65" y="16" width="5" height="5" rx="1" fill="#10b981" />
+          <rect x="48" y="18" width="4" height="4" rx="1" fill="#38bdf8" />
+          <circle cx="43" cy="38" r="7" fill="#0284c7" />
+          <path d="M25 46 C35 52, 52 50, 60 40 C53 56, 48 68, 36 80 L28 74 C35 64, 38 56, 25 46 Z" fill="#0ea5e9" />
+          <circle cx="75" cy="42" r="7" fill="#10b981" />
+          <path d="M60 52 C70 56, 85 52, 94 44 C84 58, 82 72, 74 82 L64 78 C68 68, 68 60, 60 52 Z" fill="#14b8a6" />
+          <path d="M22 86 C35 98, 68 102, 96 82 C84 78, 68 82, 56 80 C44 78, 34 74, 22 86 Z" fill="#0369a1" />
+        </svg>
+      );
+    };
+
+    function App() {
+      const [messages, setMessages] = useState([]);
+      const [input, setInput] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [isListening, setIsListening] = useState(false);
+      const [micLevels, setMicLevels] = useState([25, 45, 70, 45, 25]);
+      const [showIframeMicModal, setShowIframeMicModal] = useState(false);
+
+      // 제미나이 라이브 (Gemini Live) 상태
+      const [isLiveOpen, setIsLiveOpen] = useState(false);
+      const [liveState, setLiveState] = useState("listening"); // 'listening' | 'thinking' | 'speaking'
+      const [liveTranscript, setLiveTranscript] = useState("");
+      const [liveReply, setLiveReply] = useState("안녕하세요! 판교 IT 활동 지원단 AI 도우미입니다. 편하게 말씀해 주세요.");
+
+      const [apiKey, setApiKey] = useState(() => window.injectedApiKey || localStorage.getItem("PANGYO_GEMINI_KEY") || "");
+      const [availableModels, setAvailableModels] = useState(DEFAULT_MODELS);
+      const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
+      const [selectedVoice, setSelectedVoice] = useState(() => window.injectedVoice || localStorage.getItem("PANGYO_VOICE") || "Aoede");
+      const [speakingIdx, setSpeakingIdx] = useState(null);
+      const [ttsLoadingIdx, setTtsLoadingIdx] = useState(null);
+      const [modelStatus, setModelStatus] = useState("");
+      const [attachment, setAttachment] = useState(null);
+
+      const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem("PANGYO_SESSIONS") || "[]"));
+      const [currentSessionId, setCurrentSessionId] = useState(null);
+
+      const [showSettings, setShowSettings] = useState(false);
+      const [showHistory, setShowHistory] = useState(false);
+      const [activeTab, setActiveTab] = useState("ai");
+
+      const chatEndRef = useRef(null);
+      const fileInputRef = useRef(null);
+      const audioRef = useRef(null);
+      const recognitionRef = useRef(null);
+      const waveIntervalRef = useRef(null);
+      const silenceTimerRef = useRef(null);
+      const isLiveActiveRef = useRef(false);
+      const messagesRef = useRef(messages);
+
+      useEffect(() => {
+        messagesRef.current = messages;
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, [messages, loading]);
+
+      useEffect(() => {
+        if (window.injectedApiKey) {
+          localStorage.setItem("PANGYO_GEMINI_KEY", window.injectedApiKey);
+        }
+      }, []);
+
+      // 음성 인식 중 시각적 파형 애니메이션 (getUserMedia와의 마이크 이중 점유 충돌 방지)
+      const startWaveAnimation = () => {
+        if (waveIntervalRef.current) clearInterval(waveIntervalRef.current);
+        waveIntervalRef.current = setInterval(() => {
+          setMicLevels([
+            Math.floor(25 + Math.random() * 65),
+            Math.floor(35 + Math.random() * 65),
+            Math.floor(45 + Math.random() * 55),
+            Math.floor(35 + Math.random() * 65),
+            Math.floor(25 + Math.random() * 65)
+          ]);
+        }, 120);
+      };
+
+      const stopWaveAnimation = () => {
+        if (waveIntervalRef.current) {
+          clearInterval(waveIntervalRef.current);
+          waveIntervalRef.current = null;
+        }
+        setMicLevels([25, 40, 60, 40, 25]);
+      };
+
+      // 구글 사이트 iframe 탈출용 안전한 독립 HTML 생성기 (코드 깨짐 0%)
+      const buildStandaloneHtml = () => {
+        const babelCode = document.getElementById("app-babel-source")?.textContent || "";
+        return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>판교 IT 활동 지원단 AI 도우미</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin><\/script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin><\/script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+  <script>
+    window.injectedApiKey = ${JSON.stringify(apiKey)};
+    window.injectedVoice = ${JSON.stringify(selectedVoice)};
+  <\/script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Pretendard', sans-serif; background-color: #eaf4fd; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    @keyframes livePulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.16); opacity: 1; } }
+    @keyframes liveRipple { 0% { transform: scale(0.85); opacity: 0.75; } 100% { transform: scale(2.2); opacity: 0; } }
+    .live-orb { animation: livePulse 2s infinite ease-in-out; }
+    .live-ring-1 { animation: liveRipple 2.2s infinite ease-out; }
+    .live-ring-2 { animation: liveRipple 2.2s infinite ease-out 0.7s; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script id="app-babel-source" type="text/babel">${babelCode}<\/script>
+</body>
+</html>`;
+      };
+
+      // 단독 실행 파일 다운로드 (태블릿이나 PC에서 바로 열거나 호스팅에 올릴 수 있는 파일)
+      const downloadStandaloneApp = () => {
+        const htmlContent = buildStandaloneHtml();
+        const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "판교_AI_도우미_독립실행앱.html";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      const syncModelsFromGoogle = async (keyToUse) => {
+        const cleanKey = (keyToUse || apiKey).trim();
+        if (!cleanKey) return null;
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+          const data = await res.json();
+          if (!data.models) return null;
+
+          const validModels = data.models
+            .filter(m => {
+              const name = m.name.replace("models/", "");
+              const supportsChat = m.supportedGenerationMethods?.includes("generateContent");
+              const isGemini = name.startsWith("gemini-");
+              const isExcluded =
+                name.includes("1.5") ||
+                name.includes("1.0") ||
+                name.includes("2.0-flash-exp") ||
+                name.includes("embedding") ||
+                name.includes("tts") ||
+                name.includes("image") ||
+                name.includes("vision") ||
+                name.includes("aqa") ||
+                name.includes("audio") ||
+                name.includes("robotics") ||
+                name.includes("computer-use");
+              return supportsChat && isGemini && !isExcluded;
+            })
+            .map(m => {
+              const id = m.name.replace("models/", "");
+              return { id, label: m.displayName ? `${m.displayName} (${id})` : id };
+            });
+
+          validModels.sort((a, b) => {
+            const score = (id) => {
+              if (id === "gemini-3-flash-preview") return 100;
+              if (id.startsWith("gemini-3")) return 90;
+              if (id === "gemini-flash-latest") return 85;
+              if (id === "gemini-pro-latest") return 80;
+              if (id.startsWith("gemini-2.5")) return 70;
+              return 50;
+            };
+            return score(b.id) - score(a.id);
+          });
+
+          if (validModels.length > 0) {
+            setAvailableModels(validModels);
+            if (!validModels.some(m => m.id === selectedModel)) {
+              setSelectedModel(validModels[0].id);
+            }
+            setModelStatus(`✅ 최신 모델 ${validModels.length}개 동기화 완료`);
+            return validModels;
+          }
+        } catch (e) {
+          console.warn(e);
+        }
+        return null;
+      };
+
+      useEffect(() => {
+        if (apiKey) syncModelsFromGoogle(apiKey);
+      }, [apiKey]);
+
+      const handleFileChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64Data = reader.result.split(",")[1];
+          setAttachment({
+            name: file.name,
+            mimeType: file.type || "image/png",
+            data: base64Data
+          });
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const stopAllAudio = () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+        window.speechSynthesis?.cancel();
+        setSpeakingIdx(null);
+      };
+
+      // 제미나이 공식 TTS 음성 합성 및 재생
+      const speakWithGeminiTTS = async (text, idx = -1, onComplete = null) => {
+        if (idx !== -1 && speakingIdx === idx) {
+          stopAllAudio();
+          return;
+        }
+        stopAllAudio();
+
+        const cleanText = (text || "").replace(/[*#>`~_-]/g, "").trim();
+        const cleanKey = apiKey.trim();
+        if (!cleanKey) {
+          setShowSettings(true);
+          if (onComplete) onComplete();
+          return;
+        }
+
+        const ttsInputText = idx === -99 && cleanText.length > 350 ? cleanText.slice(0, 350) : cleanText;
+        if (idx >= 0) setTtsLoadingIdx(idx);
+
+        try {
+          const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"];
+          let audioBase64 = null;
+
+          for (const ttsModel of ttsModels) {
+            const res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${cleanKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [{ text: `다음 내용을 친절하고 자연스러운 한국어 억양으로 읽어주세요:\n\n${ttsInputText}` }]
+                  }],
+                  generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                      voiceConfig: {
+                        prebuiltVoiceConfig: { voiceName: selectedVoice }
+                      }
+                    }
+                  }
+                })
+              }
+            );
+            const data = await res.json();
+            const inlineData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+            if (inlineData?.data) {
+              audioBase64 = inlineData.data;
+              break;
+            }
+          }
+
+          if (audioBase64) {
+            const wavUrl = pcmBase64ToWavUrl(audioBase64, 24000);
+            const audio = new Audio(wavUrl);
+            audioRef.current = audio;
+            setTtsLoadingIdx(null);
+            setSpeakingIdx(idx);
+            audio.onended = () => {
+              setSpeakingIdx(null);
+              URL.revokeObjectURL(wavUrl);
+              if (onComplete) onComplete();
+            };
+            audio.onerror = () => {
+              setSpeakingIdx(null);
+              if (onComplete) onComplete();
+            };
+            await audio.play();
+            return;
+          }
+          throw new Error("TTS 응답 없음");
+        } catch (err) {
+          setTtsLoadingIdx(null);
+          if (window.speechSynthesis) {
+            const utterance = new SpeechSynthesisUtterance(ttsInputText);
+            utterance.lang = "ko-KR";
+            setSpeakingIdx(idx);
+            utterance.onend = () => {
+              setSpeakingIdx(null);
+              if (onComplete) onComplete();
+            };
+            utterance.onerror = () => {
+              setSpeakingIdx(null);
+              if (onComplete) onComplete();
+            };
+            window.speechSynthesis.speak(utterance);
+          } else if (onComplete) {
+            onComplete();
+          }
+        }
+      };
+
+      const callGeminiWithFallback = async (cleanKey, contentsPayload, preferredModel, isLiveMode = false) => {
+        const candidates = [
+          preferredModel,
+          "gemini-3-flash-preview",
+          "gemini-flash-latest",
+          "gemini-3.1-pro-preview",
+          ...availableModels.map(m => m.id)
+        ].filter((v, i, a) => v && a.indexOf(v) === i);
+
+        let lastError = null;
+        const sysPrompt = isLiveMode
+          ? "당신은 성남시 '판교 IT 활동 지원단'의 음성 대화형 AI 도우미입니다. 지금 어르신 또는 활동가와 실시간 음성 대화(Gemini Live) 중입니다. 귀로 듣기 편하도록 마크다운 기호 없이 2~3문장 이내의 친절하고 자연스러운 구어체로 핵심만 대답해주세요."
+          : "당신은 성남시 분당구 판교노인종합복지관 및 '판교 IT 활동 지원단'의 공식 AI 도우미입니다. 어르신들과 활동가들이 이해하기 쉽게 친절하고 명확한 한국어로 답변하며, 문서 작성·자료 요약·아이디어 기획을 체계적으로 돕습니다.";
+
+        for (const modelId of candidates) {
+          try {
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${cleanKey}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: contentsPayload,
+                  systemInstruction: { parts: [{ text: sysPrompt }] }
+                })
+              }
+            );
+            const data = await response.json();
+            if (data.error) {
+              const errMsg = data.error.message || "";
+              if (errMsg.includes("API_KEY_INVALID") || errMsg.includes("API key not valid")) {
+                throw new Error("API 키가 올바르지 않습니다. 우측 상단 설정에서 키를 확인해주세요.");
+              }
+              lastError = new Error(errMsg);
+              continue;
+            }
+            const replyText = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("\n") || "답변을 생성하지 못했습니다.";
+            if (modelId !== preferredModel) setSelectedModel(modelId);
+            return replyText;
+          } catch (networkErr) {
+            lastError = networkErr;
+            if (networkErr.message.includes("API 키가 올바르지")) throw networkErr;
+          }
+        }
+        throw lastError || new Error("호출 가능한 모델을 찾을 수 없습니다.");
+      };
+
+      const handleSend = async (overridePrompt, autoSpeak = false) => {
+        const text = (overridePrompt !== undefined ? overridePrompt : input).trim();
+        if ((!text && !attachment) || loading) return;
+
+        const cleanKey = apiKey.trim();
+        if (!cleanKey) {
+          setShowSettings(true);
+          return;
+        }
+
+        setIsListening(false);
+        stopWaveAnimation();
+
+        const userMsg = {
+          role: "user",
+          text: text || `[첨부파일 분석 요청: ${attachment.name}]`,
+          attachment: attachment
+        };
+
+        const cleanHistory = messagesRef.current.filter(m => !m.isError);
+        const nextMessages = [...cleanHistory, userMsg];
+
+        setMessages(nextMessages);
+        setInput("");
+        setAttachment(null);
+        setLoading(true);
+        setActiveTab("ai");
+
+        try {
+          const contentsPayload = nextMessages.map(m => {
+            const parts = [];
+            if (m.text) parts.push({ text: m.text });
+            if (m.attachment) {
+              parts.push({
+                inlineData: {
+                  mimeType: m.attachment.mimeType,
+                  data: m.attachment.data
+                }
+              });
+            }
+            return { role: m.role === "user" ? "user" : "model", parts };
+          });
+
+          const botReply = await callGeminiWithFallback(cleanKey, contentsPayload, selectedModel, false);
+          const finalMessages = [...nextMessages, { role: "model", text: botReply, isError: false }];
+          setMessages(finalMessages);
+
+          if (autoSpeak) {
+            speakWithGeminiTTS(botReply, finalMessages.length - 1);
+          }
+
+          const sId = currentSessionId || Date.now().toString();
+          setCurrentSessionId(sId);
+          const filteredSessions = sessions.filter(s => s.id !== sId);
+          const updatedSessions = [
+            {
+              id: sId,
+              title: (text || "음성 대화").slice(0, 22),
+              messages: finalMessages,
+              date: new Date().toLocaleDateString("ko-KR")
+            },
+            ...filteredSessions
+          ];
+          setSessions(updatedSessions);
+          localStorage.setItem("PANGYO_SESSIONS", JSON.stringify(updatedSessions));
+        } catch (err) {
+          setMessages(prev => [...prev, { role: "model", text: `⚠️ 오류 안내: ${err.message}`, isError: true }]);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // =========================================================================
+      // 🎤 마이크 버튼 구동 (이중 점유 충돌 제거 & 구글 사이트 iframe 차단 안내)
+      // =========================================================================
+      const handleMicButtonClick = () => {
+        if (isListening) {
+          if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch (e) {}
+          }
+          setIsListening(false);
+          stopWaveAnimation();
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          alert("현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.");
+          return;
+        }
+
+        try {
+          const recognition = new SpeechRecognition();
+          recognitionRef.current = recognition;
+          recognition.lang = "ko-KR";
+          recognition.interimResults = true;
+          recognition.continuous = false;
+
+          let finalCaptured = "";
+
+          recognition.onstart = () => {
+            setIsListening(true);
+            startWaveAnimation();
+          };
+
+          recognition.onresult = (event) => {
+            const transcript = Array.from(event.results).map(r => r[0].transcript).join("");
+            finalCaptured = transcript;
+            setInput(transcript);
+          };
+
+          recognition.onerror = (event) => {
+            setIsListening(false);
+            stopWaveAnimation();
+            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+              // 구글 사이트 iframe 내부여서 마이크가 차단된 경우 전용 안내 모달 표시
+              if (window.self !== window.top) {
+                setShowIframeMicModal(true);
+              } else {
+                alert("브라우저 주소창 왼쪽의 설정(자물쇠) 아이콘을 눌러 마이크 권한을 [허용]으로 변경해주세요.");
+              }
+            }
+          };
+
+          recognition.onend = () => {
+            setIsListening(false);
+            stopWaveAnimation();
+            if (finalCaptured.trim()) {
+              handleSend(finalCaptured.trim(), true);
+            }
+          };
+
+          recognition.start();
+        } catch (err) {
+          setIsListening(false);
+          stopWaveAnimation();
+          if (window.self !== window.top) {
+            setShowIframeMicModal(true);
+          }
+        }
+      };
+
+      // =========================================================================
+      // 🌟 제미나이 라이브 (Gemini Live) 연속 핸즈프리 음성 대화
+      // =========================================================================
+      const handleStartLiveClick = () => {
+        const cleanKey = apiKey.trim();
+        if (!cleanKey) {
+          setShowSettings(true);
+          return;
+        }
+        stopAllAudio();
+        setIsLiveOpen(true);
+        isLiveActiveRef.current = true;
+        setLiveState("listening");
+        setLiveTranscript("");
+        setLiveReply("안녕하세요! 판교 IT 활동 지원단 제미나이 라이브입니다. 지금 편하게 말씀해 주세요.");
+        beginLiveListenCycle();
+      };
+
+      const stopGeminiLive = () => {
+        isLiveActiveRef.current = false;
+        setIsLiveOpen(false);
+        setLiveState("listening");
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch (e) {}
+        }
+        stopWaveAnimation();
+        stopAllAudio();
+      };
+
+      const beginLiveListenCycle = () => {
+        if (!isLiveActiveRef.current) return;
+        setLiveState("listening");
+        setLiveTranscript("");
+        startWaveAnimation();
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch (e) {}
+        }
+
+        try {
+          const recognition = new SpeechRecognition();
+          recognitionRef.current = recognition;
+          recognition.lang = "ko-KR";
+          recognition.interimResults = true;
+          recognition.continuous = true;
+
+          let accumulatedText = "";
+          let submitted = false;
+
+          const submitTurn = (finalText) => {
+            if (submitted || !isLiveActiveRef.current || !finalText.trim()) return;
+            submitted = true;
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            try { recognition.stop(); } catch (e) {}
+            processLiveTurn(finalText.trim());
+          };
+
+          recognition.onresult = (event) => {
+            if (!isLiveActiveRef.current) return;
+            const text = Array.from(event.results).map(r => r[0].transcript).join("").trim();
+            accumulatedText = text;
+            setLiveTranscript(text);
+
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            if (text.length > 0) {
+              silenceTimerRef.current = setTimeout(() => {
+                submitTurn(text);
+              }, 1400);
+            }
+          };
+
+          recognition.onerror = (event) => {
+            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+              stopGeminiLive();
+              if (window.self !== window.top) {
+                setShowIframeMicModal(true);
+              } else {
+                alert("브라우저 주소창 왼쪽 아이콘에서 마이크 권한을 허용해주세요.");
+              }
+            }
+          };
+
+          recognition.onend = () => {
+            if (!isLiveActiveRef.current) return;
+            if (!submitted && accumulatedText.trim().length > 0) {
+              submitTurn(accumulatedText.trim());
+            } else if (!submitted) {
+              setTimeout(() => {
+                if (isLiveActiveRef.current && liveState === "listening") beginLiveListenCycle();
+              }, 350);
+            }
+          };
+
+          recognition.start();
+        } catch (e) {}
+      };
+
+      const processLiveTurn = async (userVoiceText) => {
+        if (!isLiveActiveRef.current || !userVoiceText.trim()) return;
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch (e) {}
+        }
+        stopWaveAnimation();
+
+        setLiveState("thinking");
+        setLiveTranscript(userVoiceText);
+
+        const cleanHistory = messagesRef.current.filter(m => !m.isError);
+        const nextMessages = [...cleanHistory, { role: "user", text: userVoiceText }];
+        setMessages(nextMessages);
+
+        try {
+          const contentsPayload = nextMessages.slice(-8).map(m => ({
+            role: m.role === "user" ? "user" : "model",
+            parts: [{ text: m.text }]
+          }));
+
+          const reply = await callGeminiWithFallback(apiKey.trim(), contentsPayload, selectedModel, true);
+          if (!isLiveActiveRef.current) return;
+
+          setLiveReply(reply);
+          const updatedMessages = [...nextMessages, { role: "model", text: reply, isError: false }];
+          setMessages(updatedMessages);
+
+          setLiveState("speaking");
+          startWaveAnimation();
+          await speakWithGeminiTTS(reply, -99, () => {
+            stopWaveAnimation();
+            if (isLiveActiveRef.current) {
+              beginLiveListenCycle();
+            }
+          });
+        } catch (err) {
+          setLiveReply("죄송합니다. 다시 한 번 말씀해 주세요.");
+          setTimeout(() => {
+            if (isLiveActiveRef.current) beginLiveListenCycle();
+          }, 1800);
+        }
+      };
+
+      const startNewChat = () => {
+        setMessages([]);
+        setCurrentSessionId(null);
+        setAttachment(null);
+        setActiveTab("ai");
+        setShowHistory(false);
+      };
+
+      return (
+        <div className="w-screen h-screen flex flex-col justify-between relative overflow-hidden bg-gradient-to-b from-[#d8ecfa] via-[#eef6fc] to-[#d5ebfb]">
+          {/* 배경 아트워크 */}
+          <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+            <svg className="absolute top-0 left-0 w-full h-full opacity-55" viewBox="0 0 1440 900" preserveAspectRatio="none">
+              <path d="M-100,220 C320,420 580,40 1540,280 L1540,900 L-100,900 Z" fill="url(#wave1)" />
+              <path d="M-100,520 C420,280 960,640 1540,380 L1540,900 L-100,900 Z" fill="url(#wave2)" />
+              <defs>
+                <linearGradient id="wave1" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#bae6fd" stopOpacity="0.6" />
+                  <stop offset="100%" stopColor="#e0f2fe" stopOpacity="0.2" />
+                </linearGradient>
+                <linearGradient id="wave2" x1="1" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.35" />
+                  <stop offset="50%" stopColor="#93c5fd" stopOpacity="0.35" />
+                  <stop offset="100%" stopColor="#ffffff" stopOpacity="0.8" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-[#bae6fd]/70 to-transparent flex items-end justify-around px-6 opacity-45">
+              {[40, 68, 52, 85, 45, 60, 92, 55, 74, 50, 80, 62, 48, 70, 58, 82].map((h, i) => (
+                <div key={i} style={{ height: `${h}%` }} className="w-8 md:w-16 bg-[#6495ed]/40 rounded-t-sm" />
+              ))}
+            </div>
+          </div>
+
+          {/* 상단 헤더 */}
+          <header className="relative z-20 w-full bg-white/90 backdrop-blur-md border-b border-blue-100 px-5 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-4 lg:gap-7">
+              <div onClick={startNewChat} className="flex items-center gap-2.5 cursor-pointer">
+                <PangyoLogo size="small" />
+                <span className="font-extrabold text-[#113264] text-lg lg:text-xl tracking-tight">판교 IT 활동 지원단</span>
+              </div>
+
+              <div className="hidden md:block h-5 w-px bg-slate-300" />
+
+              <nav className="flex items-center gap-3 lg:gap-5 text-sm font-semibold text-slate-600">
+                <button
+                  onClick={() => setActiveTab("ai")}
+                  className={`flex items-center gap-1.5 py-1 border-b-2 transition-all ${
+                    activeTab === "ai" ? "text-blue-600 border-blue-600 font-bold" : "border-transparent hover:text-blue-600"
+                  }`}
+                >
+                  <Icon name="home" className="w-4 h-4" /> AI 도우미
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  onClick={() => setActiveTab("docs")}
+                  className={`flex items-center gap-1.5 py-1 border-b-2 transition-all ${
+                    activeTab === "docs" ? "text-blue-600 border-blue-600 font-bold" : "border-transparent hover:text-blue-600"
+                  }`}
+                >
+                  <Icon name="doc" className="w-4 h-4" /> 활동 자료
+                </button>
+                <span className="text-slate-300">|</span>
+                <button
+                  onClick={() => setActiveTab("notice")}
+                  className={`flex items-center gap-1.5 py-1 border-b-2 transition-all ${
+                    activeTab === "notice" ? "text-blue-600 border-blue-600 font-bold" : "border-transparent hover:text-blue-600"
+                  }`}
+                >
+                  <Icon name="notice" className="w-4 h-4" /> 공지사항
+                </button>
+              </nav>
+            </div>
+
+            {/* 우측 컨트롤 바 */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleStartLiveClick}
+                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all"
+              >
+                <Icon name="wave" className="w-4 h-4" />
+                <span>제미나이 라이브</span>
+              </button>
+
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="text-xs bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-2 font-semibold text-slate-700 outline-none cursor-pointer max-w-[180px]"
+              >
+                {availableModels.map(m => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+
+              <select
+                value={selectedVoice}
+                onChange={(e) => {
+                  setSelectedVoice(e.target.value);
+                  localStorage.setItem("PANGYO_VOICE", e.target.value);
+                }}
+                className="text-xs bg-blue-50/90 hover:bg-blue-100/80 border border-blue-200 rounded-xl px-2.5 py-2 font-bold text-blue-800 outline-none cursor-pointer max-w-[175px]"
+              >
+                {GEMINI_VOICES.map(v => (
+                  <option key={v.id} value={v.id}>{v.label}</option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => setShowHistory(true)}
+                className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl"
+                title="지난 대화 불러오기"
+              >
+                <Icon name="history" className="w-5 h-5" />
+              </button>
+
+              <button
+                onClick={() => setShowSettings(true)}
+                className={`px-3 py-2 rounded-xl flex items-center gap-1 text-xs font-bold border ${
+                  apiKey
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-300 animate-pulse"
+                }`}
+              >
+                <Icon name="settings" className="w-4 h-4" />
+                <span>{apiKey ? "API 연결됨" : "API 키 입력"}</span>
+              </button>
+            </div>
+          </header>
+
+          {/* 본문 영역 */}
+          <main className="relative z-10 flex-1 flex flex-col items-center justify-center w-full px-4 md:px-10 py-4 overflow-hidden">
+            {activeTab !== "ai" ? (
+              <div className="w-full h-full max-w-[1400px] bg-white/95 backdrop-blur rounded-3xl shadow-xl border border-blue-100 p-8 overflow-y-auto">
+                <div className="flex justify-between items-center mb-4 pb-3 border-b">
+                  <h2 className="text-xl font-extrabold text-[#113264]">
+                    {activeTab === "docs" && "📁 판교 IT 활동 지원단 활동 자료실"}
+                    {activeTab === "notice" && "📢 공지사항"}
+                  </h2>
+                  <button onClick={() => setActiveTab("ai")} className="text-sm font-bold text-blue-600 hover:underline">
+                    ← AI 도우미로 돌아가기
+                  </button>
+                </div>
+                {activeTab === "docs" && (
+                  <ul className="space-y-3 text-sm text-slate-700">
+                    <li className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center">
+                      <span>1. 경로당 스마트 기기 교육 표준 교안 (태블릿·키오스크 기초)</span>
+                      <button onClick={() => handleSend("경로당 어르신 대상 태블릿 및 키오스크 기초 교육 1시간 교안을 작성해줘.")} className="text-xs bg-blue-600 text-white px-3.5 py-2 rounded-xl font-bold">AI로 초안 열기</button>
+                    </li>
+                    <li className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center">
+                      <span>2. IT 활동 지원단 일일 활동 일지 및 결과 보고서 양식</span>
+                      <button onClick={() => handleSend("IT 활동 지원단 방문 교육 일일 활동 일지 양식을 표 형태로 만들어줘.")} className="text-xs bg-blue-600 text-white px-3.5 py-2 rounded-xl font-bold">AI로 초안 열기</button>
+                    </li>
+                  </ul>
+                )}
+                {activeTab === "notice" && (
+                  <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 text-sm text-slate-700">
+                    <div className="font-bold text-blue-900 mb-1">[안내] 마이크 음성 입력 및 제미나이 라이브 안정화 완료</div>
+                    <p className="text-xs text-slate-600">구글 사이트 임베드 환경에서 마이크 권한이 차단될 경우 독립 실행 파일로 내려받아 제한 없이 사용할 수 있습니다.</p>
+                  </div>
+                )}
+              </div>
+            ) : messages.length === 0 ? (
+              /* 초기 메인 스킨 화면 */
+              <div className="w-full max-w-5xl flex flex-col items-center text-center my-auto px-2">
+                <div className="mb-3 drop-shadow-sm">
+                  <PangyoLogo size="large" />
+                </div>
+
+                <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight text-slate-800 mb-7">
+                  <span className="text-[#113264]">판교 IT 활동 지원단</span>에 오신 것을 환영합니다
+                </h1>
+
+                <div className="w-full bg-white/95 backdrop-blur rounded-[30px] shadow-[0_14px_44px_rgba(17,50,100,0.09)] border border-white p-6 mb-7">
+                  {isListening && (
+                    <div className="flex items-center justify-between bg-red-50 border border-red-200 px-5 py-3 rounded-2xl mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-end gap-1 h-6">
+                          {micLevels.map((lvl, idx) => (
+                            <span
+                              key={idx}
+                              style={{ height: `${lvl}%` }}
+                              className="w-1.5 bg-red-500 rounded-full transition-all duration-75"
+                            />
+                          ))}
+                        </div>
+                        <span className="text-sm font-extrabold text-red-600">
+                          마이크가 켜졌습니다! 말씀이 끝나면 자동으로 전송됩니다...
+                        </span>
+                      </div>
+                      <button
+                        onClick={handleMicButtonClick}
+                        className="text-xs font-bold bg-white text-slate-600 px-3 py-1 rounded-lg border border-slate-200"
+                      >
+                        중지
+                      </button>
+                    </div>
+                  )}
+
+                  {attachment && (
+                    <div className="flex items-center justify-between bg-blue-50 px-3.5 py-2 rounded-xl mb-3 text-xs text-blue-700 font-semibold">
+                      <span>📎 첨부됨: {attachment.name}</span>
+                      <button onClick={() => setAttachment(null)} className="text-red-500 font-bold ml-2">삭제</button>
+                    </div>
+                  )}
+
+                  <textarea
+                    rows="2"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    placeholder={isListening ? "🎤 말씀을 듣고 있습니다..." : "무엇을 도와드릴까요?"}
+                    className="w-full resize-none border-none outline-none bg-transparent text-slate-800 placeholder-slate-400 text-lg md:text-xl"
+                  />
+
+                  <div className="flex items-center justify-between pt-3 mt-1">
+                    <button
+                      onClick={startNewChat}
+                      className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-full transition-colors"
+                      title="새 대화"
+                    >
+                      <Icon name="plus" className="w-6 h-6" />
+                    </button>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,.txt,.md,.csv"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-2.5 text-slate-500 hover:bg-slate-100 rounded-full transition-colors"
+                        title="파일/이미지 첨부"
+                      >
+                        <Icon name="clip" className="w-6 h-6" />
+                      </button>
+
+                      {/* 마이크 구동 버튼 */}
+                      <button
+                        onClick={handleMicButtonClick}
+                        className={`p-3 rounded-full border-2 transition-all flex items-center justify-center ${
+                          isListening
+                            ? "bg-red-500 text-white border-red-500 animate-pulse shadow-lg scale-110"
+                            : "text-slate-700 border-slate-300 hover:bg-blue-50 hover:border-blue-400"
+                        }`}
+                        title="마이크로 음성 입력"
+                      >
+                        <Icon name="mic" className="w-6 h-6" />
+                      </button>
+
+                      {/* 제미나이 라이브 바로 실행 버튼 */}
+                      <button
+                        onClick={handleStartLiveClick}
+                        className="px-4 py-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-sm flex items-center gap-1.5 shadow-md transition-all"
+                      >
+                        <Icon name="wave" className="w-5 h-5" />
+                        <span>Live 대화</span>
+                      </button>
+
+                      <div className="h-6 w-px bg-slate-200" />
+
+                      <button
+                        onClick={() => handleSend()}
+                        disabled={loading || (!input.trim() && !attachment)}
+                        className="w-12 h-12 rounded-full bg-[#5b9bd5] hover:bg-blue-600 text-white flex items-center justify-center shadow-md disabled:opacity-40 transition-all"
+                        title="전송"
+                      >
+                        <Icon name="send" className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 하단 4개 퀵 액션 카드 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full">
+                  {[
+                    {
+                      title: "문서 작성",
+                      icon: "doc",
+                      color: "text-blue-600 bg-blue-50",
+                      prompt: "판교노인종합복지관 IT 활동 지원단의 경로당 방문 스마트폰 교육 안내문 초안을 정중하고 읽기 쉽게 작성해줘."
+                    },
+                    {
+                      title: "이미지 제작",
+                      icon: "image",
+                      color: "text-emerald-600 bg-emerald-50",
+                      prompt: "어르신들과 청년 봉사자가 나란히 앉아 태블릿PC를 보며 환하게 웃고 있는 홍보 포스터 시안 구성과 문구를 만들어줘."
+                    },
+                    {
+                      title: "자료 요약",
+                      icon: "chart",
+                      color: "text-indigo-600 bg-indigo-50",
+                      prompt: "다음 회의록이나 복지관 활동 자료를 핵심 3줄 요약과 실행 과제로 일목요연하게 정리해줘: "
+                    },
+                    {
+                      title: "아이디어 정리",
+                      icon: "bulb",
+                      color: "text-teal-600 bg-teal-50",
+                      prompt: "경로당 어르신들이 흥미를 느끼고 쉽게 참여할 수 있는 디지털 체험 프로그램 아이디어 5가지를 제안해줘."
+                    }
+                  ].map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleSend(item.prompt)}
+                      className="bg-white/95 backdrop-blur border border-white rounded-2xl px-5 py-4 flex items-center justify-between shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2.5 rounded-xl ${item.color}`}>
+                          <Icon name={item.icon} className="w-5 h-5" />
+                        </div>
+                        <span className="font-bold text-slate-700 text-base">{item.title}</span>
+                      </div>
+                      <Icon name="chevronRight" className="w-4 h-4 text-slate-400 group-hover:text-blue-600" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* 채팅 세션 진행 화면 */
+              <div className="w-full h-full max-w-[1440px] bg-white/95 backdrop-blur rounded-3xl shadow-xl border border-blue-100 flex flex-col overflow-hidden">
+                <div className="px-6 py-3.5 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500 shrink-0">
+                  <div className="flex items-center gap-3">
+                    <span>대화 세션 진행 중 ({selectedModel})</span>
+                    <span className="text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                      현재 음성: {selectedVoice}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button onClick={handleStartLiveClick} className="text-indigo-600 hover:underline font-extrabold flex items-center gap-1">
+                      🎙️ 제미나이 라이브 전환
+                    </button>
+                    <button onClick={startNewChat} className="text-blue-600 hover:underline text-sm">
+                      + 새 대화 시작
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 p-6 md:p-8 overflow-y-auto space-y-5 custom-scrollbar">
+                  {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                      <div
+                        className={`max-w-[88%] rounded-2xl px-6 py-4 text-base leading-relaxed shadow-sm ${
+                          msg.role === "user"
+                            ? "bg-blue-600 text-white"
+                            : msg.isError
+                            ? "bg-amber-50 text-amber-900 border border-amber-200"
+                            : "bg-slate-100 text-slate-800"
+                        }`}
+                      >
+                        {msg.role === "user" ? (
+                          <div className="whitespace-pre-wrap">{msg.text}</div>
+                        ) : (
+                          <FormattedMessage text={msg.text} />
+                        )}
+
+                        {msg.role === "model" && !msg.isError && (
+                          <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center gap-4 text-xs font-semibold text-slate-500">
+                            <button
+                              onClick={() => speakWithGeminiTTS(msg.text, idx)}
+                              disabled={ttsLoadingIdx === idx}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all ${
+                                speakingIdx === idx
+                                  ? "bg-red-100 text-red-600 font-bold"
+                                  : "bg-white hover:bg-blue-50 text-blue-600 border border-slate-200"
+                              }`}
+                            >
+                              <Icon name={speakingIdx === idx ? "stop" : "volume"} className="w-4 h-4" />
+                              {ttsLoadingIdx === idx
+                                ? "제미나이 음성 생성 중..."
+                                : speakingIdx === idx
+                                ? "음성 중지"
+                                : `제미나이 음성 듣기 (${selectedVoice})`}
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                navigator.clipboard?.writeText(msg.text);
+                                alert("답변이 복사되었습니다.");
+                              }}
+                              className="flex items-center gap-1 hover:text-blue-600"
+                            >
+                              <Icon name="copy" className="w-4 h-4" /> 복사
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {loading && (
+                    <div className="flex justify-start">
+                      <div className="bg-slate-100 text-slate-600 rounded-2xl px-6 py-4 text-base font-medium animate-pulse">
+                        판교 AI 도우미가 답변을 작성하고 있습니다...
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* 하단 연속 질문 입력창 */}
+                <div className="p-4 bg-white border-t border-slate-100 flex items-center gap-2.5 shrink-0">
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    placeholder={isListening ? "🎤 듣고 있습니다... 말씀이 끝나면 자동 전송됩니다." : "이어서 질문하기..."}
+                    className="flex-1 px-5 py-3.5 rounded-2xl border border-slate-200 text-base outline-none focus:border-blue-500"
+                  />
+                  <button
+                    onClick={handleMicButtonClick}
+                    className={`p-3.5 rounded-2xl transition-all ${
+                      isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    <Icon name="mic" className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={handleStartLiveClick}
+                    className="px-4 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm flex items-center gap-1.5"
+                  >
+                    <Icon name="wave" className="w-5 h-5" />
+                    <span className="hidden sm:inline">Live</span>
+                  </button>
+                  <button
+                    onClick={() => handleSend()}
+                    disabled={loading || !input.trim()}
+                    className="px-6 py-3.5 rounded-2xl bg-blue-600 text-white font-bold text-base hover:bg-blue-700 disabled:opacity-40"
+                  >
+                    전송
+                  </button>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* 구글 사이트 iframe 마이크 차단 감지 시 안내 모달 */}
+          {showIframeMicModal && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-extrabold text-slate-800 text-lg">🎤 구글 사이트 마이크 차단 안내</h3>
+                  <button onClick={() => setShowIframeMicModal(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-5 h-5" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-4">
+                  구글 사이트(Google Sites)는 보안 정책상 내부 임베드 박스의 마이크 권한(`allow="microphone"`)을 원천 차단합니다. 아래 버튼으로 <strong>독립 실행 파일</strong>을 내려받아 실행하거나 무료 웹호스팅(Netlify Drop 등)에 올리시면 마이크와 제미나이 라이브가 100% 정상 작동합니다.
+                </p>
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => {
+                      downloadStandaloneApp();
+                      setShowIframeMicModal(false);
+                    }}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <Icon name="external" className="w-4 h-4" />
+                    마이크 100% 작동 독립 실행 파일(.html) 받기
+                  </button>
+                  <button
+                    onClick={() => setShowIframeMicModal(false)}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 제미나이 라이브 (Gemini Live) 풀스크린 실시간 음성 대화 화면 */}
+          {isLiveOpen && (
+            <div className="fixed inset-0 z-50 bg-gradient-to-b from-[#0b192c] via-[#102a45] to-[#091526] text-white flex flex-col justify-between p-6 md:p-10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="font-extrabold text-base md:text-lg tracking-tight">Gemini Live · 실시간 음성 대화</span>
+                  <select
+                    value={selectedVoice}
+                    onChange={(e) => {
+                      setSelectedVoice(e.target.value);
+                      localStorage.setItem("PANGYO_VOICE", e.target.value);
+                    }}
+                    className="text-xs bg-white/15 border border-white/20 rounded-full px-3 py-1 font-bold text-cyan-200 outline-none cursor-pointer"
+                  >
+                    {GEMINI_VOICES.map(v => (
+                      <option key={v.id} value={v.id} className="text-slate-900">{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={stopGeminiLive}
+                  className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs md:text-sm font-bold flex items-center gap-1.5"
+                >
+                  <Icon name="x" className="w-4 h-4" /> 대화 종료
+                </button>
+              </div>
+
+              <div className="flex-1 flex flex-col items-center justify-center text-center max-w-3xl mx-auto w-full my-auto">
+                <div className="relative flex items-center justify-center w-48 h-48 md:w-56 md:h-56 mb-8">
+                  {(liveState === "listening" || liveState === "speaking") && (
+                    <>
+                      <div className={`absolute inset-0 rounded-full live-ring-1 ${
+                        liveState === "listening" ? "bg-cyan-400/30" : "bg-indigo-400/35"
+                      }`} />
+                      <div className={`absolute inset-0 rounded-full live-ring-2 ${
+                        liveState === "listening" ? "bg-blue-400/25" : "bg-purple-400/30"
+                      }`} />
+                    </>
+                  )}
+                  <div
+                    onClick={() => {
+                      if (liveState === "speaking") {
+                        stopAllAudio();
+                        beginLiveListenCycle();
+                      } else {
+                        beginLiveListenCycle();
+                      }
+                    }}
+                    className={`relative z-10 w-40 h-40 md:w-44 md:h-44 rounded-full flex flex-col items-center justify-center cursor-pointer shadow-[0_0_70px_rgba(56,189,248,0.5)] transition-all live-orb ${
+                      liveState === "listening"
+                        ? "bg-gradient-to-tr from-cyan-500 via-blue-500 to-indigo-500"
+                        : liveState === "thinking"
+                        ? "bg-gradient-to-tr from-amber-500 to-orange-500"
+                        : "bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500"
+                    }`}
+                  >
+                    <div className="flex items-end gap-1.5 h-10 mb-2">
+                      {micLevels.map((lvl, idx) => (
+                        <span
+                          key={idx}
+                          style={{ height: `${liveState === "listening" || liveState === "speaking" ? lvl : 30}%` }}
+                          className="w-2 bg-white rounded-full transition-all duration-75"
+                        />
+                      ))}
+                    </div>
+                    <span className="text-xs font-extrabold tracking-wider uppercase text-white/95">
+                      {liveState === "listening" && "말씀해 주세요 (듣는 중)"}
+                      {liveState === "thinking" && "제미나이 생각 중..."}
+                      {liveState === "speaking" && "제미나이 말하는 중"}
+                    </span>
+                  </div>
+                </div>
+
+                {liveTranscript && (
+                  <div className="bg-white/10 backdrop-blur px-6 py-3 rounded-2xl text-cyan-200 text-lg md:text-xl font-bold mb-4">
+                    “{liveTranscript}”
+                  </div>
+                )}
+
+                <div className="text-xl md:text-2xl font-bold leading-relaxed text-white/95 max-h-48 overflow-y-auto custom-scrollbar px-4">
+                  {liveReply}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-4">
+                {liveState === "speaking" && (
+                  <button
+                    onClick={() => {
+                      stopAllAudio();
+                      beginLiveListenCycle();
+                    }}
+                    className="px-6 py-3.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-sm shadow-md"
+                  >
+                    ✋ 끊고 바로 말하기
+                  </button>
+                )}
+                <button
+                  onClick={stopGeminiLive}
+                  className="px-8 py-4 rounded-full bg-red-500 hover:bg-red-600 text-white font-extrabold text-base shadow-lg"
+                >
+                  라이브 대화 종료하기
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* API 및 음성 설정 모달 */}
+          {showSettings && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-extrabold text-slate-800 text-lg">API 키 및 제미나이 음성 설정</h3>
+                  <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-slate-600">
+                    <Icon name="x" className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">Google AI Studio API Key</label>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        localStorage.setItem("PANGYO_GEMINI_KEY", e.target.value.trim());
+                      }}
+                      placeholder="AIzaSy... 로 시작하는 키 입력"
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">제미나이 라이브 & 음성 읽기(TTS) 목소리</label>
+                    <select
+                      value={selectedVoice}
+                      onChange={(e) => {
+                        setSelectedVoice(e.target.value);
+                        localStorage.setItem("PANGYO_VOICE", e.target.value);
+                      }}
+                      className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none"
+                    >
+                      {GEMINI_VOICES.map(v => (
+                        <option key={v.id} value={v.id}>{v.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <span className="text-xs text-slate-600 font-medium">
+                      {modelStatus || "키 입력 후 모델 동기화를 눌러주세요."}
+                    </span>
+                    <button
+                      onClick={() => syncModelsFromGoogle(apiKey)}
+                      className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      <Icon name="refresh" className="w-3.5 h-3.5" /> 모델 동기화
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      syncModelsFromGoogle(apiKey);
+                      setShowSettings(false);
+                    }}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm"
+                  >
+                    저장 및 닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 지난 대화 기록 서랍 */}
+          {showHistory && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex justify-end">
+              <div className="bg-white w-80 h-full p-5 shadow-2xl flex flex-col">
+                <div className="flex justify-between items-center pb-4 border-b">
+                  <h3 className="font-extrabold text-slate-800">지난 대화 세션</h3>
+                  <button onClick={() => setShowHistory(false)} className="text-slate-400">
+                    <Icon name="x" className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto py-3 space-y-2 custom-scrollbar">
+                  {sessions.length === 0 ? (
+                    <div className="text-center text-xs text-slate-400 mt-10">저장된 대화가 없습니다.</div>
+                  ) : (
+                    sessions.map(s => (
+                      <div
+                        key={s.id}
+                        onClick={() => {
+                          setCurrentSessionId(s.id);
+                          setMessages(s.messages);
+                          setActiveTab("ai");
+                          setShowHistory(false);
+                        }}
+                        className="p-3 rounded-xl border border-slate-100 hover:bg-blue-50 cursor-pointer"
+                      >
+                        <div className="font-bold text-xs text-slate-700 truncate">{s.title}</div>
+                        <div className="text-[11px] text-slate-400 mt-1">{s.date}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("PANGYO_SESSIONS");
+                    setSessions([]);
+                  }}
+                  className="text-xs text-red-500 hover:underline py-2 font-semibold"
+                >
+                  기록 전체 비우기
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
