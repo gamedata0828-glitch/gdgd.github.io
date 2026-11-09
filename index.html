@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#eaf4fd" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>판교 IT 활동 지원단 AI 도우미</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -18,28 +21,16 @@
       overflow: hidden;
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background-color: #eaf4fd;
+      -webkit-tap-highlight-color: transparent;
     }
     .custom-scrollbar::-webkit-scrollbar { width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-
-    @keyframes livePulse {
-      0%, 100% { transform: scale(1); opacity: 0.9; }
-      50% { transform: scale(1.16); opacity: 1; }
-    }
-    @keyframes liveRipple {
-      0% { transform: scale(0.85); opacity: 0.75; }
-      100% { transform: scale(2.2); opacity: 0; }
-    }
-    .live-orb { animation: livePulse 2s infinite ease-in-out; }
-    .live-ring-1 { animation: liveRipple 2.2s infinite ease-out; }
-    .live-ring-2 { animation: liveRipple 2.2s infinite ease-out 0.7s; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- 원본 소스를 안전하게 보관하기 위한 id 부여 (코드 깨짐 원천 방지) -->
-  <script id="app-babel-source" type="text/babel">
+  <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
     const DEFAULT_MODELS = [
@@ -58,7 +49,7 @@
       { id: "Fenrir", label: "🎙️ 펜리르 (Fenrir · 힘있고 명확한 남성음)" }
     ];
 
-    // Raw PCM(24kHz, 16-bit, Mono) -> WAV Blob URL 변환
+    // Raw PCM(24kHz, 16-bit, Mono) -> WAV Blob URL 변환 (제미나이 고품질 TTS용)
     function pcmBase64ToWavUrl(base64Pcm, sampleRate = 24000) {
       const binaryString = window.atob(base64Pcm);
       const len = binaryString.length;
@@ -88,6 +79,7 @@
       return URL.createObjectURL(blob);
     }
 
+    // 마크다운 깔끔 렌더링 컴포넌트
     function FormattedMessage({ text }) {
       const lines = (text || "").split('\n');
       const renderBold = (str) => {
@@ -133,12 +125,12 @@
         home: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />,
         doc: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
         notice: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
+        help: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
         history: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />,
         settings: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />,
         plus: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />,
         clip: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />,
         mic: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />,
-        wave: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h.01M9 8v8m4-12v16m4-10v4m4-2h.01" />,
         send: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
         image: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />,
         chart: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
@@ -148,8 +140,7 @@
         stop: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />,
         copy: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />,
         x: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />,
-        refresh: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />,
-        external: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        refresh: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       };
       return (
         <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,123 +169,39 @@
       const [messages, setMessages] = useState([]);
       const [input, setInput] = useState("");
       const [loading, setLoading] = useState(false);
-      const [isListening, setIsListening] = useState(false);
-      const [micLevels, setMicLevels] = useState([25, 45, 70, 45, 25]);
-      const [showIframeMicModal, setShowIframeMicModal] = useState(false);
 
-      // 제미나이 라이브 (Gemini Live) 상태
-      const [isLiveOpen, setIsLiveOpen] = useState(false);
-      const [liveState, setLiveState] = useState("listening"); // 'listening' | 'thinking' | 'speaking'
-      const [liveTranscript, setLiveTranscript] = useState("");
-      const [liveReply, setLiveReply] = useState("안녕하세요! 판교 IT 활동 지원단 AI 도우미입니다. 편하게 말씀해 주세요.");
+      // 안드로이드 키보드 마이크 입력 안내 상태 (권한 요청 없음)
+      const [keyboardVoiceGuide, setKeyboardVoiceGuide] = useState(false);
 
-      const [apiKey, setApiKey] = useState(() => window.injectedApiKey || localStorage.getItem("PANGYO_GEMINI_KEY") || "");
+      const [apiKey, setApiKey] = useState(() => localStorage.getItem("PANGYO_GEMINI_KEY") || "");
       const [availableModels, setAvailableModels] = useState(DEFAULT_MODELS);
       const [selectedModel, setSelectedModel] = useState("gemini-3-flash-preview");
-      const [selectedVoice, setSelectedVoice] = useState(() => window.injectedVoice || localStorage.getItem("PANGYO_VOICE") || "Aoede");
+      const [selectedVoice, setSelectedVoice] = useState(() => localStorage.getItem("PANGYO_VOICE") || "Aoede");
       const [speakingIdx, setSpeakingIdx] = useState(null);
       const [ttsLoadingIdx, setTtsLoadingIdx] = useState(null);
       const [modelStatus, setModelStatus] = useState("");
       const [attachment, setAttachment] = useState(null);
 
+      const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("PANGYO_USER") || "null"));
       const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem("PANGYO_SESSIONS") || "[]"));
       const [currentSessionId, setCurrentSessionId] = useState(null);
 
       const [showSettings, setShowSettings] = useState(false);
       const [showHistory, setShowHistory] = useState(false);
+      const [showLoginModal, setShowLoginModal] = useState(false);
       const [activeTab, setActiveTab] = useState("ai");
 
       const chatEndRef = useRef(null);
       const fileInputRef = useRef(null);
+      const mainInputRef = useRef(null);
+      const chatInputRef = useRef(null);
       const audioRef = useRef(null);
-      const recognitionRef = useRef(null);
-      const waveIntervalRef = useRef(null);
-      const silenceTimerRef = useRef(null);
-      const isLiveActiveRef = useRef(false);
       const messagesRef = useRef(messages);
 
       useEffect(() => {
         messagesRef.current = messages;
         chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, [messages, loading]);
-
-      useEffect(() => {
-        if (window.injectedApiKey) {
-          localStorage.setItem("PANGYO_GEMINI_KEY", window.injectedApiKey);
-        }
-      }, []);
-
-      // 음성 인식 중 시각적 파형 애니메이션 (getUserMedia와의 마이크 이중 점유 충돌 방지)
-      const startWaveAnimation = () => {
-        if (waveIntervalRef.current) clearInterval(waveIntervalRef.current);
-        waveIntervalRef.current = setInterval(() => {
-          setMicLevels([
-            Math.floor(25 + Math.random() * 65),
-            Math.floor(35 + Math.random() * 65),
-            Math.floor(45 + Math.random() * 55),
-            Math.floor(35 + Math.random() * 65),
-            Math.floor(25 + Math.random() * 65)
-          ]);
-        }, 120);
-      };
-
-      const stopWaveAnimation = () => {
-        if (waveIntervalRef.current) {
-          clearInterval(waveIntervalRef.current);
-          waveIntervalRef.current = null;
-        }
-        setMicLevels([25, 40, 60, 40, 25]);
-      };
-
-      // 구글 사이트 iframe 탈출용 안전한 독립 HTML 생성기 (코드 깨짐 0%)
-      const buildStandaloneHtml = () => {
-        const babelCode = document.getElementById("app-babel-source")?.textContent || "";
-        return `<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>판교 IT 활동 지원단 AI 도우미</title>
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin><\/script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin><\/script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-  <script>
-    window.injectedApiKey = ${JSON.stringify(apiKey)};
-    window.injectedVoice = ${JSON.stringify(selectedVoice)};
-  <\/script>
-  <style>
-    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    html, body, #root { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Pretendard', sans-serif; background-color: #eaf4fd; }
-    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    @keyframes livePulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.16); opacity: 1; } }
-    @keyframes liveRipple { 0% { transform: scale(0.85); opacity: 0.75; } 100% { transform: scale(2.2); opacity: 0; } }
-    .live-orb { animation: livePulse 2s infinite ease-in-out; }
-    .live-ring-1 { animation: liveRipple 2.2s infinite ease-out; }
-    .live-ring-2 { animation: liveRipple 2.2s infinite ease-out 0.7s; }
-  </style>
-</head>
-<body>
-  <div id="root"></div>
-  <script id="app-babel-source" type="text/babel">${babelCode}<\/script>
-</body>
-</html>`;
-      };
-
-      // 단독 실행 파일 다운로드 (태블릿이나 PC에서 바로 열거나 호스팅에 올릴 수 있는 파일)
-      const downloadStandaloneApp = () => {
-        const htmlContent = buildStandaloneHtml();
-        const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "판교_AI_도우미_독립실행앱.html";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      };
 
       const syncModelsFromGoogle = async (keyToUse) => {
         const cleanKey = (keyToUse || apiKey).trim();
@@ -373,6 +280,20 @@
         reader.readAsDataURL(file);
       };
 
+      // =========================================================================
+      // 🎤 안드로이드 키보드 내장 마이크 호출용 포커스 핸들러 (브라우저 권한 요청 0%)
+      // =========================================================================
+      const handleKeyboardMicFocus = (target) => {
+        setKeyboardVoiceGuide(true);
+        if (target === "chat" && chatInputRef.current) {
+          chatInputRef.current.focus();
+          chatInputRef.current.click();
+        } else if (mainInputRef.current) {
+          mainInputRef.current.focus();
+          mainInputRef.current.click();
+        }
+      };
+
       const stopAllAudio = () => {
         if (audioRef.current) {
           audioRef.current.pause();
@@ -383,8 +304,8 @@
       };
 
       // 제미나이 공식 TTS 음성 합성 및 재생
-      const speakWithGeminiTTS = async (text, idx = -1, onComplete = null) => {
-        if (idx !== -1 && speakingIdx === idx) {
+      const speakWithGeminiTTS = async (text, idx) => {
+        if (speakingIdx === idx) {
           stopAllAudio();
           return;
         }
@@ -394,12 +315,10 @@
         const cleanKey = apiKey.trim();
         if (!cleanKey) {
           setShowSettings(true);
-          if (onComplete) onComplete();
           return;
         }
 
-        const ttsInputText = idx === -99 && cleanText.length > 350 ? cleanText.slice(0, 350) : cleanText;
-        if (idx >= 0) setTtsLoadingIdx(idx);
+        setTtsLoadingIdx(idx);
 
         try {
           const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-2.5-pro-preview-tts"];
@@ -413,7 +332,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   contents: [{
-                    parts: [{ text: `다음 내용을 친절하고 자연스러운 한국어 억양으로 읽어주세요:\n\n${ttsInputText}` }]
+                    parts: [{ text: `다음 내용을 친절하고 자연스러운 한국어 억양으로 읽어주세요:\n\n${cleanText}` }]
                   }],
                   generationConfig: {
                     responseModalities: ["AUDIO"],
@@ -443,11 +362,9 @@
             audio.onended = () => {
               setSpeakingIdx(null);
               URL.revokeObjectURL(wavUrl);
-              if (onComplete) onComplete();
             };
             audio.onerror = () => {
               setSpeakingIdx(null);
-              if (onComplete) onComplete();
             };
             await audio.play();
             return;
@@ -456,25 +373,17 @@
         } catch (err) {
           setTtsLoadingIdx(null);
           if (window.speechSynthesis) {
-            const utterance = new SpeechSynthesisUtterance(ttsInputText);
+            const utterance = new SpeechSynthesisUtterance(cleanText);
             utterance.lang = "ko-KR";
             setSpeakingIdx(idx);
-            utterance.onend = () => {
-              setSpeakingIdx(null);
-              if (onComplete) onComplete();
-            };
-            utterance.onerror = () => {
-              setSpeakingIdx(null);
-              if (onComplete) onComplete();
-            };
+            utterance.onend = () => setSpeakingIdx(null);
+            utterance.onerror = () => setSpeakingIdx(null);
             window.speechSynthesis.speak(utterance);
-          } else if (onComplete) {
-            onComplete();
           }
         }
       };
 
-      const callGeminiWithFallback = async (cleanKey, contentsPayload, preferredModel, isLiveMode = false) => {
+      const callGeminiWithFallback = async (cleanKey, contentsPayload, preferredModel) => {
         const candidates = [
           preferredModel,
           "gemini-3-flash-preview",
@@ -484,9 +393,7 @@
         ].filter((v, i, a) => v && a.indexOf(v) === i);
 
         let lastError = null;
-        const sysPrompt = isLiveMode
-          ? "당신은 성남시 '판교 IT 활동 지원단'의 음성 대화형 AI 도우미입니다. 지금 어르신 또는 활동가와 실시간 음성 대화(Gemini Live) 중입니다. 귀로 듣기 편하도록 마크다운 기호 없이 2~3문장 이내의 친절하고 자연스러운 구어체로 핵심만 대답해주세요."
-          : "당신은 성남시 분당구 판교노인종합복지관 및 '판교 IT 활동 지원단'의 공식 AI 도우미입니다. 어르신들과 활동가들이 이해하기 쉽게 친절하고 명확한 한국어로 답변하며, 문서 작성·자료 요약·아이디어 기획을 체계적으로 돕습니다.";
+        const sysPrompt = "당신은 성남시 분당구 판교노인종합복지관 및 '판교 IT 활동 지원단'의 공식 AI 도우미입니다. 어르신들과 활동가들이 이해하기 쉽게 친절하고 명확한 한국어로 답변하며, 문서 작성·자료 요약·아이디어 기획을 체계적으로 돕습니다.";
 
         for (const modelId of candidates) {
           try {
@@ -521,7 +428,7 @@
         throw lastError || new Error("호출 가능한 모델을 찾을 수 없습니다.");
       };
 
-      const handleSend = async (overridePrompt, autoSpeak = false) => {
+      const handleSend = async (overridePrompt) => {
         const text = (overridePrompt !== undefined ? overridePrompt : input).trim();
         if ((!text && !attachment) || loading) return;
 
@@ -531,8 +438,7 @@
           return;
         }
 
-        setIsListening(false);
-        stopWaveAnimation();
+        setKeyboardVoiceGuide(false);
 
         const userMsg = {
           role: "user",
@@ -564,13 +470,9 @@
             return { role: m.role === "user" ? "user" : "model", parts };
           });
 
-          const botReply = await callGeminiWithFallback(cleanKey, contentsPayload, selectedModel, false);
+          const botReply = await callGeminiWithFallback(cleanKey, contentsPayload, selectedModel);
           const finalMessages = [...nextMessages, { role: "model", text: botReply, isError: false }];
           setMessages(finalMessages);
-
-          if (autoSpeak) {
-            speakWithGeminiTTS(botReply, finalMessages.length - 1);
-          }
 
           const sId = currentSessionId || Date.now().toString();
           setCurrentSessionId(sId);
@@ -578,7 +480,7 @@
           const updatedSessions = [
             {
               id: sId,
-              title: (text || "음성 대화").slice(0, 22),
+              title: (text || "첨부파일 분석").slice(0, 22),
               messages: finalMessages,
               date: new Date().toLocaleDateString("ko-KR")
             },
@@ -593,225 +495,11 @@
         }
       };
 
-      // =========================================================================
-      // 🎤 마이크 버튼 구동 (이중 점유 충돌 제거 & 구글 사이트 iframe 차단 안내)
-      // =========================================================================
-      const handleMicButtonClick = () => {
-        if (isListening) {
-          if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch (e) {}
-          }
-          setIsListening(false);
-          stopWaveAnimation();
-          return;
-        }
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-          alert("현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 브라우저를 사용해주세요.");
-          return;
-        }
-
-        try {
-          const recognition = new SpeechRecognition();
-          recognitionRef.current = recognition;
-          recognition.lang = "ko-KR";
-          recognition.interimResults = true;
-          recognition.continuous = false;
-
-          let finalCaptured = "";
-
-          recognition.onstart = () => {
-            setIsListening(true);
-            startWaveAnimation();
-          };
-
-          recognition.onresult = (event) => {
-            const transcript = Array.from(event.results).map(r => r[0].transcript).join("");
-            finalCaptured = transcript;
-            setInput(transcript);
-          };
-
-          recognition.onerror = (event) => {
-            setIsListening(false);
-            stopWaveAnimation();
-            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-              // 구글 사이트 iframe 내부여서 마이크가 차단된 경우 전용 안내 모달 표시
-              if (window.self !== window.top) {
-                setShowIframeMicModal(true);
-              } else {
-                alert("브라우저 주소창 왼쪽의 설정(자물쇠) 아이콘을 눌러 마이크 권한을 [허용]으로 변경해주세요.");
-              }
-            }
-          };
-
-          recognition.onend = () => {
-            setIsListening(false);
-            stopWaveAnimation();
-            if (finalCaptured.trim()) {
-              handleSend(finalCaptured.trim(), true);
-            }
-          };
-
-          recognition.start();
-        } catch (err) {
-          setIsListening(false);
-          stopWaveAnimation();
-          if (window.self !== window.top) {
-            setShowIframeMicModal(true);
-          }
-        }
-      };
-
-      // =========================================================================
-      // 🌟 제미나이 라이브 (Gemini Live) 연속 핸즈프리 음성 대화
-      // =========================================================================
-      const handleStartLiveClick = () => {
-        const cleanKey = apiKey.trim();
-        if (!cleanKey) {
-          setShowSettings(true);
-          return;
-        }
-        stopAllAudio();
-        setIsLiveOpen(true);
-        isLiveActiveRef.current = true;
-        setLiveState("listening");
-        setLiveTranscript("");
-        setLiveReply("안녕하세요! 판교 IT 활동 지원단 제미나이 라이브입니다. 지금 편하게 말씀해 주세요.");
-        beginLiveListenCycle();
-      };
-
-      const stopGeminiLive = () => {
-        isLiveActiveRef.current = false;
-        setIsLiveOpen(false);
-        setLiveState("listening");
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch (e) {}
-        }
-        stopWaveAnimation();
-        stopAllAudio();
-      };
-
-      const beginLiveListenCycle = () => {
-        if (!isLiveActiveRef.current) return;
-        setLiveState("listening");
-        setLiveTranscript("");
-        startWaveAnimation();
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) return;
-
-        if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch (e) {}
-        }
-
-        try {
-          const recognition = new SpeechRecognition();
-          recognitionRef.current = recognition;
-          recognition.lang = "ko-KR";
-          recognition.interimResults = true;
-          recognition.continuous = true;
-
-          let accumulatedText = "";
-          let submitted = false;
-
-          const submitTurn = (finalText) => {
-            if (submitted || !isLiveActiveRef.current || !finalText.trim()) return;
-            submitted = true;
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            try { recognition.stop(); } catch (e) {}
-            processLiveTurn(finalText.trim());
-          };
-
-          recognition.onresult = (event) => {
-            if (!isLiveActiveRef.current) return;
-            const text = Array.from(event.results).map(r => r[0].transcript).join("").trim();
-            accumulatedText = text;
-            setLiveTranscript(text);
-
-            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-            if (text.length > 0) {
-              silenceTimerRef.current = setTimeout(() => {
-                submitTurn(text);
-              }, 1400);
-            }
-          };
-
-          recognition.onerror = (event) => {
-            if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-              stopGeminiLive();
-              if (window.self !== window.top) {
-                setShowIframeMicModal(true);
-              } else {
-                alert("브라우저 주소창 왼쪽 아이콘에서 마이크 권한을 허용해주세요.");
-              }
-            }
-          };
-
-          recognition.onend = () => {
-            if (!isLiveActiveRef.current) return;
-            if (!submitted && accumulatedText.trim().length > 0) {
-              submitTurn(accumulatedText.trim());
-            } else if (!submitted) {
-              setTimeout(() => {
-                if (isLiveActiveRef.current && liveState === "listening") beginLiveListenCycle();
-              }, 350);
-            }
-          };
-
-          recognition.start();
-        } catch (e) {}
-      };
-
-      const processLiveTurn = async (userVoiceText) => {
-        if (!isLiveActiveRef.current || !userVoiceText.trim()) return;
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch (e) {}
-        }
-        stopWaveAnimation();
-
-        setLiveState("thinking");
-        setLiveTranscript(userVoiceText);
-
-        const cleanHistory = messagesRef.current.filter(m => !m.isError);
-        const nextMessages = [...cleanHistory, { role: "user", text: userVoiceText }];
-        setMessages(nextMessages);
-
-        try {
-          const contentsPayload = nextMessages.slice(-8).map(m => ({
-            role: m.role === "user" ? "user" : "model",
-            parts: [{ text: m.text }]
-          }));
-
-          const reply = await callGeminiWithFallback(apiKey.trim(), contentsPayload, selectedModel, true);
-          if (!isLiveActiveRef.current) return;
-
-          setLiveReply(reply);
-          const updatedMessages = [...nextMessages, { role: "model", text: reply, isError: false }];
-          setMessages(updatedMessages);
-
-          setLiveState("speaking");
-          startWaveAnimation();
-          await speakWithGeminiTTS(reply, -99, () => {
-            stopWaveAnimation();
-            if (isLiveActiveRef.current) {
-              beginLiveListenCycle();
-            }
-          });
-        } catch (err) {
-          setLiveReply("죄송합니다. 다시 한 번 말씀해 주세요.");
-          setTimeout(() => {
-            if (isLiveActiveRef.current) beginLiveListenCycle();
-          }, 1800);
-        }
-      };
-
       const startNewChat = () => {
         setMessages([]);
         setCurrentSessionId(null);
         setAttachment(null);
+        setKeyboardVoiceGuide(false);
         setActiveTab("ai");
         setShowHistory(false);
       };
@@ -879,23 +567,24 @@
                 >
                   <Icon name="notice" className="w-4 h-4" /> 공지사항
                 </button>
+                <span className="text-slate-300 hidden sm:inline">|</span>
+                <button
+                  onClick={() => setActiveTab("help")}
+                  className={`hidden sm:flex items-center gap-1.5 py-1 border-b-2 transition-all ${
+                    activeTab === "help" ? "text-blue-600 border-blue-600 font-bold" : "border-transparent hover:text-blue-600"
+                  }`}
+                >
+                  <Icon name="help" className="w-4 h-4" /> 도움말
+                </button>
               </nav>
             </div>
 
             {/* 우측 컨트롤 바 */}
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={handleStartLiveClick}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all"
-              >
-                <Icon name="wave" className="w-4 h-4" />
-                <span>제미나이 라이브</span>
-              </button>
-
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
-                className="text-xs bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-2 font-semibold text-slate-700 outline-none cursor-pointer max-w-[180px]"
+                className="text-xs bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-xl px-2.5 py-2 font-semibold text-slate-700 outline-none cursor-pointer max-w-[185px]"
               >
                 {availableModels.map(m => (
                   <option key={m.id} value={m.id}>{m.label}</option>
@@ -908,7 +597,7 @@
                   setSelectedVoice(e.target.value);
                   localStorage.setItem("PANGYO_VOICE", e.target.value);
                 }}
-                className="text-xs bg-blue-50/90 hover:bg-blue-100/80 border border-blue-200 rounded-xl px-2.5 py-2 font-bold text-blue-800 outline-none cursor-pointer max-w-[175px]"
+                className="text-xs bg-blue-50/90 hover:bg-blue-100/80 border border-blue-200 rounded-xl px-2.5 py-2 font-bold text-blue-800 outline-none cursor-pointer max-w-[180px]"
               >
                 {GEMINI_VOICES.map(v => (
                   <option key={v.id} value={v.id}>{v.label}</option>
@@ -934,6 +623,22 @@
                 <Icon name="settings" className="w-4 h-4" />
                 <span>{apiKey ? "API 연결됨" : "API 키 입력"}</span>
               </button>
+
+              {user ? (
+                <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                  <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                    {user.name[0]}
+                  </div>
+                  <span className="text-xs font-semibold text-slate-700 hidden xl:inline">{user.name}</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="text-xs font-bold px-3 py-2 bg-blue-50 text-blue-600 rounded-xl border border-blue-200 hover:bg-blue-100"
+                >
+                  Google 로그인
+                </button>
+              )}
             </div>
           </header>
 
@@ -945,6 +650,7 @@
                   <h2 className="text-xl font-extrabold text-[#113264]">
                     {activeTab === "docs" && "📁 판교 IT 활동 지원단 활동 자료실"}
                     {activeTab === "notice" && "📢 공지사항"}
+                    {activeTab === "help" && "💡 안드로이드 태블릿 음성 입력 및 홈 화면 설치 안내"}
                   </h2>
                   <button onClick={() => setActiveTab("ai")} className="text-sm font-bold text-blue-600 hover:underline">
                     ← AI 도우미로 돌아가기
@@ -964,14 +670,20 @@
                 )}
                 {activeTab === "notice" && (
                   <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-100 text-sm text-slate-700">
-                    <div className="font-bold text-blue-900 mb-1">[안내] 마이크 음성 입력 및 제미나이 라이브 안정화 완료</div>
-                    <p className="text-xs text-slate-600">구글 사이트 임베드 환경에서 마이크 권한이 차단될 경우 독립 실행 파일로 내려받아 제한 없이 사용할 수 있습니다.</p>
+                    <div className="font-bold text-blue-900 mb-1">[업데이트] GitHub Pages 정식 배포 및 안드로이드 키보드 마이크 연동 완료</div>
+                    <p className="text-xs text-slate-600">권한 팝업 없이 마이크 버튼을 누르면 즉시 태블릿 키보드가 올라와 키보드 내장 마이크로 편리하게 음성 입력을 하실 수 있습니다.</p>
+                  </div>
+                )}
+                {activeTab === "help" && (
+                  <div className="space-y-3 text-sm text-slate-700 leading-relaxed">
+                    <p><strong>1. 키보드 마이크로 음성 입력하기:</strong> 화면의 <strong>마이크(🎙️) 버튼</strong>을 누르면 입력창에 커서가 켜지면서 태블릿 키보드가 올라옵니다. 키보드 상단 바에 있는 <strong>마이크 아이콘</strong>을 눌러 편하게 말씀하세요.</p>
+                    <p><strong>2. 태블릿 바탕화면에 앱으로 설치하기:</strong> Chrome 우측 상단 점 3개(⋮) 메뉴에서 <strong>[홈 화면에 추가]</strong>를 누르면 주소창 없는 전체화면 앱으로 설치됩니다.</p>
                   </div>
                 )}
               </div>
             ) : messages.length === 0 ? (
               /* 초기 메인 스킨 화면 */
-              <div className="w-full max-w-5xl flex flex-col items-center text-center my-auto px-2">
+              <div className="w-full max-w-4xl flex flex-col items-center text-center my-auto px-2">
                 <div className="mb-3 drop-shadow-sm">
                   <PangyoLogo size="large" />
                 </div>
@@ -981,27 +693,20 @@
                 </h1>
 
                 <div className="w-full bg-white/95 backdrop-blur rounded-[30px] shadow-[0_14px_44px_rgba(17,50,100,0.09)] border border-white p-6 mb-7">
-                  {isListening && (
-                    <div className="flex items-center justify-between bg-red-50 border border-red-200 px-5 py-3 rounded-2xl mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-end gap-1 h-6">
-                          {micLevels.map((lvl, idx) => (
-                            <span
-                              key={idx}
-                              style={{ height: `${lvl}%` }}
-                              className="w-1.5 bg-red-500 rounded-full transition-all duration-75"
-                            />
-                          ))}
-                        </div>
-                        <span className="text-sm font-extrabold text-red-600">
-                          마이크가 켜졌습니다! 말씀이 끝나면 자동으로 전송됩니다...
+                  {/* 안드로이드 키보드 마이크 안내 배너 */}
+                  {keyboardVoiceGuide && (
+                    <div className="flex items-center justify-between bg-blue-50 border border-blue-200 px-4 py-2.5 rounded-2xl mb-3 text-left">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-lg">⌨️🎙️</span>
+                        <span className="text-xs md:text-sm font-bold text-blue-800">
+                          입력창이 활성화되었습니다! 화면 아래에 올라온 <strong>태블릿 키보드의 마이크 버튼</strong>을 눌러 말씀해 주세요.
                         </span>
                       </div>
                       <button
-                        onClick={handleMicButtonClick}
-                        className="text-xs font-bold bg-white text-slate-600 px-3 py-1 rounded-lg border border-slate-200"
+                        onClick={() => setKeyboardVoiceGuide(false)}
+                        className="text-xs font-bold text-slate-500 hover:text-slate-700 px-2 py-1"
                       >
-                        중지
+                        닫기
                       </button>
                     </div>
                   )}
@@ -1014,6 +719,7 @@
                   )}
 
                   <textarea
+                    ref={mainInputRef}
                     rows="2"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
@@ -1023,7 +729,8 @@
                         handleSend();
                       }
                     }}
-                    placeholder={isListening ? "🎤 말씀을 듣고 있습니다..." : "무엇을 도와드릴까요?"}
+                    enterKeyHint="send"
+                    placeholder={keyboardVoiceGuide ? "키보드의 마이크(🎙️) 아이콘을 눌러 말씀해 주세요..." : "무엇을 도와드릴까요?"}
                     className="w-full resize-none border-none outline-none bg-transparent text-slate-800 placeholder-slate-400 text-lg md:text-xl"
                   />
 
@@ -1052,26 +759,17 @@
                         <Icon name="clip" className="w-6 h-6" />
                       </button>
 
-                      {/* 마이크 구동 버튼 */}
+                      {/* 안드로이드 키보드 마이크 호출용 포커스 버튼 */}
                       <button
-                        onClick={handleMicButtonClick}
-                        className={`p-3 rounded-full border-2 transition-all flex items-center justify-center ${
-                          isListening
-                            ? "bg-red-500 text-white border-red-500 animate-pulse shadow-lg scale-110"
-                            : "text-slate-700 border-slate-300 hover:bg-blue-50 hover:border-blue-400"
+                        onClick={() => handleKeyboardMicFocus("main")}
+                        className={`p-2.5 rounded-full transition-all flex items-center justify-center ${
+                          keyboardVoiceGuide
+                            ? "bg-blue-600 text-white shadow-md scale-105"
+                            : "text-slate-600 hover:bg-slate-100"
                         }`}
-                        title="마이크로 음성 입력"
+                        title="키보드 마이크로 음성 입력"
                       >
                         <Icon name="mic" className="w-6 h-6" />
-                      </button>
-
-                      {/* 제미나이 라이브 바로 실행 버튼 */}
-                      <button
-                        onClick={handleStartLiveClick}
-                        className="px-4 py-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-sm flex items-center gap-1.5 shadow-md transition-all"
-                      >
-                        <Icon name="wave" className="w-5 h-5" />
-                        <span>Live 대화</span>
                       </button>
 
                       <div className="h-6 w-px bg-slate-200" />
@@ -1079,7 +777,7 @@
                       <button
                         onClick={() => handleSend()}
                         disabled={loading || (!input.trim() && !attachment)}
-                        className="w-12 h-12 rounded-full bg-[#5b9bd5] hover:bg-blue-600 text-white flex items-center justify-center shadow-md disabled:opacity-40 transition-all"
+                        className="w-11 h-11 rounded-full bg-[#5b9bd5] hover:bg-blue-600 text-white flex items-center justify-center shadow-md disabled:opacity-40 transition-all"
                         title="전송"
                       >
                         <Icon name="send" className="w-5 h-5" />
@@ -1142,14 +840,9 @@
                       현재 음성: {selectedVoice}
                     </span>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <button onClick={handleStartLiveClick} className="text-indigo-600 hover:underline font-extrabold flex items-center gap-1">
-                      🎙️ 제미나이 라이브 전환
-                    </button>
-                    <button onClick={startNewChat} className="text-blue-600 hover:underline text-sm">
-                      + 새 대화 시작
-                    </button>
-                  </div>
+                  <button onClick={startNewChat} className="text-blue-600 hover:underline text-sm">
+                    + 새 대화 시작
+                  </button>
                 </div>
 
                 <div className="flex-1 p-6 md:p-8 overflow-y-auto space-y-5 custom-scrollbar">
@@ -1214,30 +907,34 @@
                   <div ref={chatEndRef} />
                 </div>
 
+                {/* 채팅창 하단 키보드 마이크 안내 배너 */}
+                {keyboardVoiceGuide && (
+                  <div className="px-6 py-2 bg-blue-50 border-t border-blue-100 flex items-center justify-between text-xs font-bold text-blue-800">
+                    <span>⌨️🎙️ 아래 올라온 태블릿 키보드의 마이크 아이콘을 눌러 음성으로 입력하세요.</span>
+                    <button onClick={() => setKeyboardVoiceGuide(false)} className="text-slate-500">닫기</button>
+                  </div>
+                )}
+
                 {/* 하단 연속 질문 입력창 */}
                 <div className="p-4 bg-white border-t border-slate-100 flex items-center gap-2.5 shrink-0">
                   <input
+                    ref={chatInputRef}
                     type="text"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                    placeholder={isListening ? "🎤 듣고 있습니다... 말씀이 끝나면 자동 전송됩니다." : "이어서 질문하기..."}
+                    enterKeyHint="send"
+                    placeholder={keyboardVoiceGuide ? "태블릿 키보드의 마이크(🎙️)를 눌러 말씀해 주세요..." : "이어서 질문하기..."}
                     className="flex-1 px-5 py-3.5 rounded-2xl border border-slate-200 text-base outline-none focus:border-blue-500"
                   />
                   <button
-                    onClick={handleMicButtonClick}
+                    onClick={() => handleKeyboardMicFocus("chat")}
                     className={`p-3.5 rounded-2xl transition-all ${
-                      isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      keyboardVoiceGuide ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                     }`}
+                    title="키보드 마이크로 음성 입력"
                   >
                     <Icon name="mic" className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={handleStartLiveClick}
-                    className="px-4 py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm flex items-center gap-1.5"
-                  >
-                    <Icon name="wave" className="w-5 h-5" />
-                    <span className="hidden sm:inline">Live</span>
                   </button>
                   <button
                     onClick={() => handleSend()}
@@ -1250,148 +947,6 @@
               </div>
             )}
           </main>
-
-          {/* 구글 사이트 iframe 마이크 차단 감지 시 안내 모달 */}
-          {showIframeMicModal && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-extrabold text-slate-800 text-lg">🎤 구글 사이트 마이크 차단 안내</h3>
-                  <button onClick={() => setShowIframeMicModal(false)} className="text-slate-400 hover:text-slate-600">
-                    <Icon name="x" className="w-5 h-5" />
-                  </button>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed mb-4">
-                  구글 사이트(Google Sites)는 보안 정책상 내부 임베드 박스의 마이크 권한(`allow="microphone"`)을 원천 차단합니다. 아래 버튼으로 <strong>독립 실행 파일</strong>을 내려받아 실행하거나 무료 웹호스팅(Netlify Drop 등)에 올리시면 마이크와 제미나이 라이브가 100% 정상 작동합니다.
-                </p>
-                <div className="space-y-2.5">
-                  <button
-                    onClick={() => {
-                      downloadStandaloneApp();
-                      setShowIframeMicModal(false);
-                    }}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md"
-                  >
-                    <Icon name="external" className="w-4 h-4" />
-                    마이크 100% 작동 독립 실행 파일(.html) 받기
-                  </button>
-                  <button
-                    onClick={() => setShowIframeMicModal(false)}
-                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs"
-                  >
-                    닫기
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 제미나이 라이브 (Gemini Live) 풀스크린 실시간 음성 대화 화면 */}
-          {isLiveOpen && (
-            <div className="fixed inset-0 z-50 bg-gradient-to-b from-[#0b192c] via-[#102a45] to-[#091526] text-white flex flex-col justify-between p-6 md:p-10">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="font-extrabold text-base md:text-lg tracking-tight">Gemini Live · 실시간 음성 대화</span>
-                  <select
-                    value={selectedVoice}
-                    onChange={(e) => {
-                      setSelectedVoice(e.target.value);
-                      localStorage.setItem("PANGYO_VOICE", e.target.value);
-                    }}
-                    className="text-xs bg-white/15 border border-white/20 rounded-full px-3 py-1 font-bold text-cyan-200 outline-none cursor-pointer"
-                  >
-                    {GEMINI_VOICES.map(v => (
-                      <option key={v.id} value={v.id} className="text-slate-900">{v.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={stopGeminiLive}
-                  className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs md:text-sm font-bold flex items-center gap-1.5"
-                >
-                  <Icon name="x" className="w-4 h-4" /> 대화 종료
-                </button>
-              </div>
-
-              <div className="flex-1 flex flex-col items-center justify-center text-center max-w-3xl mx-auto w-full my-auto">
-                <div className="relative flex items-center justify-center w-48 h-48 md:w-56 md:h-56 mb-8">
-                  {(liveState === "listening" || liveState === "speaking") && (
-                    <>
-                      <div className={`absolute inset-0 rounded-full live-ring-1 ${
-                        liveState === "listening" ? "bg-cyan-400/30" : "bg-indigo-400/35"
-                      }`} />
-                      <div className={`absolute inset-0 rounded-full live-ring-2 ${
-                        liveState === "listening" ? "bg-blue-400/25" : "bg-purple-400/30"
-                      }`} />
-                    </>
-                  )}
-                  <div
-                    onClick={() => {
-                      if (liveState === "speaking") {
-                        stopAllAudio();
-                        beginLiveListenCycle();
-                      } else {
-                        beginLiveListenCycle();
-                      }
-                    }}
-                    className={`relative z-10 w-40 h-40 md:w-44 md:h-44 rounded-full flex flex-col items-center justify-center cursor-pointer shadow-[0_0_70px_rgba(56,189,248,0.5)] transition-all live-orb ${
-                      liveState === "listening"
-                        ? "bg-gradient-to-tr from-cyan-500 via-blue-500 to-indigo-500"
-                        : liveState === "thinking"
-                        ? "bg-gradient-to-tr from-amber-500 to-orange-500"
-                        : "bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500"
-                    }`}
-                  >
-                    <div className="flex items-end gap-1.5 h-10 mb-2">
-                      {micLevels.map((lvl, idx) => (
-                        <span
-                          key={idx}
-                          style={{ height: `${liveState === "listening" || liveState === "speaking" ? lvl : 30}%` }}
-                          className="w-2 bg-white rounded-full transition-all duration-75"
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs font-extrabold tracking-wider uppercase text-white/95">
-                      {liveState === "listening" && "말씀해 주세요 (듣는 중)"}
-                      {liveState === "thinking" && "제미나이 생각 중..."}
-                      {liveState === "speaking" && "제미나이 말하는 중"}
-                    </span>
-                  </div>
-                </div>
-
-                {liveTranscript && (
-                  <div className="bg-white/10 backdrop-blur px-6 py-3 rounded-2xl text-cyan-200 text-lg md:text-xl font-bold mb-4">
-                    “{liveTranscript}”
-                  </div>
-                )}
-
-                <div className="text-xl md:text-2xl font-bold leading-relaxed text-white/95 max-h-48 overflow-y-auto custom-scrollbar px-4">
-                  {liveReply}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-center gap-4">
-                {liveState === "speaking" && (
-                  <button
-                    onClick={() => {
-                      stopAllAudio();
-                      beginLiveListenCycle();
-                    }}
-                    className="px-6 py-3.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-sm shadow-md"
-                  >
-                    ✋ 끊고 바로 말하기
-                  </button>
-                )}
-                <button
-                  onClick={stopGeminiLive}
-                  className="px-8 py-4 rounded-full bg-red-500 hover:bg-red-600 text-white font-extrabold text-base shadow-lg"
-                >
-                  라이브 대화 종료하기
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* API 및 음성 설정 모달 */}
           {showSettings && (
@@ -1420,7 +975,7 @@
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1.5">제미나이 라이브 & 음성 읽기(TTS) 목소리</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">답변 음성 읽기(TTS) 목소리 선택</label>
                     <select
                       value={selectedVoice}
                       onChange={(e) => {
@@ -1500,6 +1055,36 @@
                   className="text-xs text-red-500 hover:underline py-2 font-semibold"
                 >
                   기록 전체 비우기
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 활동가 프로필 전환 모달 */}
+          {showLoginModal && (
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center">
+                <h3 className="font-extrabold text-slate-800 text-lg mb-1">활동가 계정 선택</h3>
+                <p className="text-xs text-slate-500 mb-5">태블릿에서 사용할 프로필을 선택하세요.</p>
+                <div className="space-y-2">
+                  {["판교 IT 지원단 1호", "판교 IT 지원단 2호", "복지관 담당자"].map((name, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        const u = { name };
+                        setUser(u);
+                        localStorage.setItem("PANGYO_USER", JSON.stringify(u));
+                        setShowLoginModal(false);
+                      }}
+                      className="w-full py-3 px-4 bg-slate-50 hover:bg-blue-50 rounded-xl text-xs font-bold text-slate-700 border border-slate-200 flex items-center justify-between"
+                    >
+                      <span>{name}</span>
+                      <span className="text-blue-600">선택</span>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setShowLoginModal(false)} className="mt-4 text-xs text-slate-400 hover:underline">
+                  닫기
                 </button>
               </div>
             </div>
